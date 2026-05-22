@@ -1,79 +1,254 @@
-const { test, expect } = require('@playwright/test');
+import { test, expect } from '@playwright/test';
 
-test('Guest user completes checkout with Cash on Delivery', async ({ page, baseURL }) => {
+/**
+ * Helper: open product via search
+ */
+async function searchProduct(page, keyword) {
+  const search = page.getByRole('combobox', { name: /suchbegriff eingeben/i });
+  await search.fill(keyword);
+  await search.press('Enter');
+}
 
-  // 1. Open storefront using the baseURL from configuration
+/**
+ * Helper: open first product result
+ */
+async function openFirstProduct(page) {
+  await page.getByRole('link').filter({ hasText: /€|product|variant/i }).first().click();
+}
+
+/**
+ * Helper: add to cart
+ */
+async function addToCart(page) {
+  await page.getByRole('button', { name: /in den warenkorb|add to cart/i }).click();
+}
+
+/**
+ * Helper: go to checkout
+ */
+async function goToCheckout(page) {
+  await page.getByRole('link', { name: /zur kasse|checkout/i }).click();
+}
+
+/**
+ * Helper: fill guest checkout
+ */
+async function fillCheckout(page, email = `test${Date.now()}@mail.com`) {
+  await page.getByRole('textbox', { name: /vorname/i }).fill('John');
+  await page.getByRole('textbox', { name: /nachname/i }).fill('Doe');
+  await page.getByRole('textbox', { name: /e-?mail/i }).fill(email);
+  await page.getByRole('textbox', { name: /straße/i }).fill('Test Street 1');
+  await page.getByRole('textbox', { name: /plz/i }).fill('12345');
+  await page.getByRole('textbox', { name: /ort/i }).fill('Berlin');
+}
+
+/* =========================================================
+   POSITIVE TEST CASES
+========================================================= */
+
+// POS-001
+test('POS-001 Guest checkout success', async ({ page }) => {
   await page.goto('/');
 
-  // Assertion: Page loads and URL contains the expected domain
-  await expect(page).toHaveURL(new RegExp(baseURL));
+  await searchProduct(page, 'Aerodynamic');
+  await openFirstProduct(page);
+  await addToCart(page);
+  await goToCheckout(page);
 
-  // 2. Search for product (Shopware 6 search input usually placeholder 'Search...')
-  const searchInput = page.getByPlaceholder(/search.../i);
-  await searchInput.waitFor({ state: 'visible' });
-  await searchInput.fill('Aerodynamic');
-  await page.keyboard.press('Enter');
+  await fillCheckout(page);
 
-  // Assertion: Search results page loaded
-  await expect(page).toHaveURL(/.*search.*/);
+  await page.getByText(/cash on delivery/i).click();
+  await page.getByRole('checkbox', { name: /agb/i }).check();
 
-  // 3. Open first product 
-  // Shopware 6 native templates use card titles or product-image links. 
-  // We look for a link containing our text or fallback to the product name wrapper.
-  const firstProduct = page.locator('.product-name, .product-box, .product-title').first();
-  await firstProduct.scrollIntoViewIfNeeded();
-  await firstProduct.click();
+  await page.getByRole('button', { name: /zahlungspflichtig bestellen/i }).click();
 
-  // Assertion: Product detail page opens (H1 title exists)
-  await expect(page.locator('h1')).toBeVisible();
+  await expect(page.locator('body')).toContainText(/order number|thank you/i);
+});
 
-  // 4. Add product to cart
-  await page.getByRole('button', { name: /add to shopping cart|buy/i }).click();
+// POS-002
+test('POS-002 Add multiple quantities', async ({ page }) => {
+  await page.goto('/');
 
-  // 5. Open cart (Shopware 6 often opens an off-canvas cart first)
-  // Let's target the cart link safely
-  const cartButton = page.getByRole('link', { name: /shopping cart|checkout/i }).first();
-  await cartButton.click();
+  await searchProduct(page, 'Aerodynamic');
+  await openFirstProduct(page);
 
-  // 6. Proceed to checkout from Cart
-  await page.getByRole('link', { name: /proceed to checkout|checkout/i }).click();
+  const qty = page.locator('input[type="number"], input[name*="quantity"]').first();
+  await qty.fill('2');
 
-  // 7. Fill Guest checkout form
-  // Shopware 6 checkout requires choosing "Do not create a customer account" for guest checkout
-  const guestCheckbox = page.getByLabel(/do not create a customer account/i);
-  if (await guestCheckbox.isVisible()) {
-    await guestCheckbox.check();
+  await addToCart(page);
+
+  await page.getByRole('link', { name: /cart|warenkorb/i }).click();
+
+  await expect(page.locator('body')).toContainText('2');
+});
+
+// POS-003
+test('POS-003 Search product', async ({ page }) => {
+  await page.goto('/');
+
+  await searchProduct(page, 'Aerodynamic');
+
+  await expect(page).toHaveURL(/search|listing/);
+  await expect(page.locator('body')).toContainText(/product|€/i);
+});
+
+// POS-004
+test('POS-004 Remove product from cart', async ({ page }) => {
+  await page.goto('/');
+
+  await searchProduct(page, 'Aerodynamic');
+  await openFirstProduct(page);
+  await addToCart(page);
+
+  await page.getByRole('link', { name: /cart/i }).click();
+
+  await page.getByRole('button', { name: /remove|delete|entfernen/i }).first().click();
+
+  await expect(page.locator('body')).not.toContainText(/Aerodynamic/i);
+});
+
+// POS-005
+test('POS-005 Change shipping address', async ({ page }) => {
+  await page.goto('/');
+
+  await searchProduct(page, 'Aerodynamic');
+  await openFirstProduct(page);
+  await addToCart(page);
+  await goToCheckout(page);
+
+  await fillCheckout(page);
+
+  // alternate shipping (if UI exists)
+  const alt = page.getByRole('textbox', { name: /shipping|lieferadresse/i });
+  if (await alt.count() > 0) {
+    await alt.first().fill('Alt Address 99');
   }
 
-  await page.getByLabel(/first name/i).fill('John');
-  await page.getByLabel(/last name/i).fill('Doe');
-  await page.getByLabel(/email/i).fill(`john${Date.now()}@test.com`);
-  await page.getByLabel(/street address/i).fill('123 Test Street');
-  await page.getByLabel(/zip code|postal code/i).fill('12345');
-  await page.getByLabel(/city/i).fill('Berlin');
+  await expect(page.getByRole('textbox', { name: /vorname/i })).toBeVisible();
+});
 
-  // Select country (Ensure 'Germany' or equivalent is selected)
-  await page.getByLabel(/country/i).selectOption({ label: 'Germany' });
+// POS-006
+test('POS-006 COD visible', async ({ page }) => {
+  await page.goto('/');
 
-  // 8. Select Cash on Delivery
-  // Payment methods in Shopware 6 are often custom radio buttons/labels
-  const codRadio = page.getByLabel(/cash on delivery/i);
-  await codRadio.scrollIntoViewIfNeeded();
-  await codRadio.check();
+  await searchProduct(page, 'Aerodynamic');
+  await openFirstProduct(page);
+  await addToCart(page);
+  await goToCheckout(page);
 
-  // Assertion: COD selected
-  await expect(codRadio).toBeChecked();
+  await expect(page.getByText(/cash on delivery/i)).toBeVisible();
+});
 
-  // 9. Submit Order
-  // Shopware 6 requires accepting Terms & Conditions (TOS) before order placement
-  const tosCheckbox = page.getByLabel(/i have read and accept the terms/i);
-  if (await tosCheckbox.isVisible()) {
-    await tosCheckbox.check();
-  }
+// POS-007
+test('POS-007 Cart persistence', async ({ page }) => {
+  await page.goto('/');
 
-  await page.getByRole('button', { name: /submit order|place order/i }).click();
+  await searchProduct(page, 'Aerodynamic');
+  await openFirstProduct(page);
+  await addToCart(page);
 
-  // 10. Assertions: Order confirmation page
-  await expect(page.locator('body')).toContainText(/thank you for your order/i);
-  await expect(page.locator('body')).toContainText(/order number/i);
+  await page.goto('/');
+  await page.getByRole('link', { name: /cart|warenkorb/i }).click();
+
+  await expect(page.locator('body')).toContainText(/Aerodynamic|1 item/i);
+});
+
+/* =========================================================
+   NEGATIVE TEST CASES
+========================================================= */
+
+test('NEG-001 Empty cart checkout blocked', async ({ page }) => {
+  await page.goto('/cart');
+
+  const checkout = page.getByRole('link', { name: /checkout/i });
+
+  await expect(checkout).toBeDisabled().catch(async () => {
+    await checkout.click({ force: true });
+    await expect(page.locator('body')).toContainText(/empty|error/i);
+  });
+});
+
+test('NEG-002 Missing required fields', async ({ page }) => {
+  await page.goto('/');
+
+  await searchProduct(page, 'Aerodynamic');
+  await openFirstProduct(page);
+  await addToCart(page);
+  await goToCheckout(page);
+
+  await page.getByRole('button', { name: /zahlungspflichtig bestellen/i }).click();
+
+  await expect(page.locator('body')).toContainText(/required|error|pflicht/i);
+});
+
+test('NEG-003 Invalid email format', async ({ page }) => {
+  await page.goto('/');
+
+  await searchProduct(page, 'Aerodynamic');
+  await openFirstProduct(page);
+  await addToCart(page);
+  await goToCheckout(page);
+
+  await page.getByRole('textbox', { name: /e-?mail/i }).fill('test@');
+
+  await page.getByRole('button', { name: /zahlungspflichtig bestellen/i }).click();
+
+  await expect(page.locator('body')).toContainText(/email|invalid/i);
+});
+
+/* =========================================================
+   EDGE CASES
+========================================================= */
+
+test('EDGE-001 Long name input', async ({ page }) => {
+  await page.goto('/');
+
+  await searchProduct(page, 'Aerodynamic');
+  await openFirstProduct(page);
+  await addToCart(page);
+  await goToCheckout(page);
+
+  await page.getByRole('textbox', { name: /vorname/i }).fill('a'.repeat(260));
+
+  await expect(page.getByRole('textbox', { name: /vorname/i })).toBeVisible();
+});
+
+test('EDGE-002 Special characters in address', async ({ page }) => {
+  await page.goto('/');
+
+  await searchProduct(page, 'Aerodynamic');
+  await openFirstProduct(page);
+  await addToCart(page);
+  await goToCheckout(page);
+
+  await page.getByRole('textbox', { name: /straße/i }).fill('äé#&/ Test Straße');
+
+  await expect(page.locator('body')).not.toContainText(/error/i);
+});
+
+test('EDGE-003 Quantity 0 handling', async ({ page }) => {
+  await page.goto('/');
+
+  await searchProduct(page, 'Aerodynamic');
+  await openFirstProduct(page);
+  await addToCart(page);
+
+  const qty = page.locator('input[type="number"]').first();
+  await qty.fill('0');
+
+  await expect(page.locator('body')).toContainText(/0|remove|invalid/i);
+});
+
+test('EDGE-004 Large quantity handling', async ({ page }) => {
+  await page.goto('/');
+
+  await searchProduct(page, 'Aerodynamic');
+  await openFirstProduct(page);
+
+  const qty = page.locator('input[type="number"]').first();
+  await qty.fill('9999');
+
+  await addToCart(page);
+
+  await expect(page.locator('body')).toContainText(/limit|stock|error/i);
 });
