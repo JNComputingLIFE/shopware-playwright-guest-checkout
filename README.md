@@ -50,7 +50,6 @@ Run headed mode (unused in app):
 npx playwright test --headed
 ```
 
--
 
 # Assertions Included
 
