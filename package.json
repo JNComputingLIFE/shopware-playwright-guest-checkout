@@ -1,10 +1,14 @@
 {
-  "name": "shopware-playwright-checkout",
-  "version": "1.0.0",
-  "scripts": {
-    "test": "playwright test"
-  },
-  "devDependencies": {
-    "@playwright/test": "^1.54.0"
-  }
-}
+     "name": "shopware-playwright-checkout",
+     "version": "1.0.0",
+     "scripts": {
+       "test": "playwright test",
+       "test:headed": "node -e \"const cmd = process.env.DISPLAY ? 'playwright test --headed' : 'xvfb-run --server-args=\\\"-screen 0 1280x1024x24\\\" playwright test --headed'; require('child_process').execSync(cmd, {stdio: 'inherit'})\"",
+       "test:debug": "node -e \"const cmd = process.env.DISPLAY ? 'playwright test --debug' : 'xvfb-run --server-args=\\\"-screen 0 1280x1024x24\\\" playwright test --debug'; require('child_process').execSync(cmd, {stdio: 'inherit'})\"",
+       "codegen": "node -e \"const cmd = process.env.DISPLAY ? 'playwright codegen https://www.shopware6-demo.development-s25.com/' : 'xvfb-run --server-args=\\\"-screen 0 1280x1024x24\\\" playwright codegen https://www.shopware6-demo.development-s25.com/'; require('child_process').execSync(cmd, {stdio: 'inherit'})\"",
+       "trace": "playwright show-trace"
+     },
+     "devDependencies": {
+       "@playwright/test": "^1.54.0"
+     }
+   }

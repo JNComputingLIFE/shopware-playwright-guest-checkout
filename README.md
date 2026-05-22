@@ -31,6 +31,7 @@ npm install
 ```
 
 ## Install Playwright browsers
+- if on incompatible os: docker run -it mcr.microsoft.com/playwright:focal
 
 ```bash
 npx playwright install
@@ -56,8 +57,9 @@ npx playwright test --headed
 
 Tested against:
 
-https://demo.shopware.com
-https://www.shopware6-demo.development-s25.com/
+- https://demo.shopware.com
+
+- https://www.shopware6-demo.development-s25.com/
 
 ---
 
