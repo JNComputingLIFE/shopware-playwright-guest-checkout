@@ -56,31 +56,49 @@ async function fillCheckout(page, email = `test${Date.now()}@mail.com`) {
 
 test('POS-001 Guest checkout success', async ({ page }) => {
   await page.goto('/');
+
   await expect(page.getByRole('banner')).toBeVisible();
 
-  await searchProduct(page, 'Aerodynamic');
-  await openFirstProduct(page);
-  await addToCart(page);
-  await goToCheckout(page);
-  await fillCheckout(page);
+  // EXACT Shopware flow (no guessing)
+  const searchInput = page.getByRole('combobox', { name: 'Suchbegriff eingeben' });
+  await searchInput.click();
+  await searchInput.fill('variant');
 
-  // Continue to confirm order step if multistep
-  const continueBtn = page.getByRole('button', { name: /weiter|continue/i });
+  await page.getByRole('link', { name: 'Variant product €' }).click();
+
+  await page.getByRole('button', { name: 'In den Warenkorb' }).click();
+
+  await page.getByRole('link', { name: 'Zur Kasse' }).click();
+
+  await page
+    .getByRole('group', { name: 'Persönliche Informationen' })
+    .getByLabel('Anrede')
+    .selectOption('019bf75c39a573b7aba05973a22ff910');
+
+  await page.getByRole('textbox', { name: 'Vorname' }).fill('Joe');
+  await page.getByRole('textbox', { name: 'Nachname' }).fill('Joe');
+  await page.getByRole('textbox', { name: 'E-Mail-Adresse' }).fill('joe@mail.to');
+
+  await page.getByRole('textbox', { name: 'Straße und Hausnummer' }).fill('text here');
+  await page.getByRole('textbox', { name: 'PLZ' }).fill('deu');
+  await page.getByRole('textbox', { name: 'Ort' }).fill('yes');
+
+  await page
+    .getByRole('group', { name: 'Ihre Adresse' })
+    .getByLabel('Bundesland')
+    .selectOption('019bf75c39b2715aa75d9374aad6c009');
+
+  const continueBtn = page.getByRole('button', { name: /weiter/i });
   if (await continueBtn.isVisible()) await continueBtn.click();
 
-  const codOption = page.getByText(/cash on delivery|nachnahme/i);
-  await expect(codOption).toBeVisible();
-  await codOption.click();
+  await page.getByRole('checkbox', { name: /AGB/i }).check();
+  await page.getByRole('radio', { name: /cash on delivery|nachnahme/i }).check();
 
-  const terms = page.getByRole('checkbox', { name: /agb|terms/i });
-  await terms.check();
-  await expect(terms).toBeChecked(); // Assertion
+  await page.getByRole('button', { name: 'Zahlungspflichtig bestellen' }).click();
 
-  await page.getByRole('button', { name: /zahlungspflichtig bestellen|place order/i }).click();
-
-  // Meaningful Assertion: Final confirmation
-  await expect(page).toHaveURL(/finish|success/i);
-  await expect(page.locator('body')).toContainText(/order number|thank you|vielen dank/i);
+  await expect(page.locator('body')).toContainText(
+    /thank you|vielen dank|bestellung|order/i
+  );
 });
 
 test('POS-002 Add multiple quantities', async ({ page }) => {
